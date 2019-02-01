@@ -1,0 +1,65 @@
+SRCDIR := src
+HEADERDIR := headers
+OBJDIR := obj
+BUILDDIR := build
+OUTPUT := $(BUILDDIR)/Application
+
+CC := avr-gcc
+CXX := avr-g++
+LINKER := avr-gcc
+OBJCOPY := avr-objcopy
+SIZE := avr-size
+
+CFLAGS := -Wall -O1 -std=c11 -c
+CXXFLAGS := -Wall -Wextra -c -std=c++17 -fno-exceptions -fno-rtti -O1
+LDFLAGS :=
+
+TARGET := -mmcu=target
+
+SRC := $(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/*.cpp)
+
+HEADERS := $(SRC:$(SRCDIR)/%.c=$(HEADERDIR)/%.h)
+HEADERS := $(HEADERS:$(SRCDIR)/%.cpp=$(HEADERDIR)/%.hpp)
+
+OBJECTS := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+OBJECTS := $(OBJECTS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+
+DEPFILES := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.d)
+DEPFILES := $(DEPFILES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.dpp)
+
+$(OUTPUT).elf : $(OBJECTS)
+	$(LINKER) $(TARGET) $^ -o $@
+	$(OBJCOPY) -j .text -j .data -j .fuse -O ihex $@ $(OUTPUT).hex
+	@echo "--------------------------------------------------------------------------------"
+	$(SIZE) $^ $@
+	@echo "--------------------------------------------------------------------------------"
+
+$(OBJDIR)/%.o : $(SRCDIR)/%.c
+	$(CC) $(CFLAGS) $(TARGET) $< -o $@
+
+$(OBJDIR)/%.o : $(SRCDIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(TARGET) $< -o $@
+
+$(OBJDIR)/%.d : $(SRCDIR)/%.c
+	$(CC) -MM $<  > $@.$($$$$)
+	sed -e 's|^[A-Za-z0-9]*.o|$(OBJDIR)/& $@|' < $@.$($$$$) > $@
+	-rm $@.$($$$$)
+
+$(OBJDIR)/%.dpp : $(SRCDIR)/%.cpp
+	$(CXX) -MM $<  > $@.$($$$$)
+	sed -e 's|^[A-Za-z0-9]*.o|$(OBJDIR)/& $@|' < $@.$($$$$) > $@
+	-rm $@.$($$$$)
+
+install : $(OUTPUT)
+	avrdude -c usbtiny -p ? -U flash:w:$(OUTPUT):e
+
+.PHONY : clean project
+clean :
+	-rm ./obj/* $(OUTPUT)
+
+project :
+	mkdir $(SRCDIR) $(HEADERDIR) $(OBJDIR) $(BUILDDIR)
+	sed -e "s|Application|$$(basename $$PWD)|" <Makefile >Makefile_temp
+	mv Makefile_temp Makefile
+
+-include $(DEPFILES)

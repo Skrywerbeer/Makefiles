@@ -1,0 +1,37 @@
+SRCDIR := src
+HEADERDIR := headers
+OBJDIR := obj
+BUILDDIR := build
+OUTPUT := $(BUILDDIR)/Application
+
+TARGET := 16f18325
+
+CC := xc8-cc
+LINKER := xc8-cc
+
+CFLAGS := -mcpu=$(TARGET) -c
+LDFLAGS := -mcpu=$(TARGET)
+
+SRC := $(wildcard $(SRCDIR)/*.c)
+HEADERS := $(SRC:$(SRCDIR)/%.c=$(HEADERDIR)/%.h)
+OBJECTS := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.p1)
+DEPFILES := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.d)
+
+$(OUTPUT).hex : $(OBJECTS)
+	$(CC) $(LDFLAGS) $^ -o $@
+
+$(OBJDIR)/%.p1 : $(SRCDIR)/%.c
+	$(CC) $(CFLAGS) $< -o $@
+
+.PHONY : clean project
+
+clean :
+	-rm $(OBJDIR)/*
+	-rm $(BUILDDIR)/*
+
+project :
+	mkdir $(SRCDIR) $(HEADERDIR) $(OBJDIR) $(BUILDDIR)
+	sed -e "s|Application|$$(basename $$PWD)|" <Makefile >Makefile_temp
+	mv Makefile_temp Makefile
+
+-include $(DEPFILES)

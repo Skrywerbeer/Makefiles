@@ -1,0 +1,71 @@
+SRCDIR := src
+HEADERDIR := headers
+OBJDIR := obj
+BUILDDIR := build
+OUTPUT := $(BUILDDIR)/Application.elf
+
+CC := arm-none-eabi-gcc
+CXX := arm-none-eabi-g++
+LINKER := arm-none-eabi-ld
+SIZE := arm-none-eabi-size
+GDB := arm-none-eabi-gdb
+OBJDUMP := arm-none-eabi-objdump
+
+override CFLAGS += -Wall -O1 -std=c11 -c -mthumb
+override CXXFLAGS += -Wall -Wextra -c -std=c++17 -mthumb -fno-exceptions -fno-rtti -O1 \
+		-fno-builtin -Wno-pmf-conversions -g
+override LDFLAGS += -T ~/Documents/Code/HomeSource/ARM/saml21-homebrew/linker/flash.ld \
+	-nostdlib -Map=$(BUILDDIR)/Application.map
+TARGET := -mcpu=cortex-m0plus
+
+SRC := $(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/*.cpp)
+
+HEADERS := $(SRC:$(SRCDIR)/%.c=$(HEADERDIR)/%.h)
+HEADERS := $(HEADERS:$(SRCDIR)/%.cpp=$(HEADERDIR)/%.hpp)
+
+OBJECTS := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+OBJECTS := $(OBJECTS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+
+DEPFILES := $(SRC:$(SRCDIR)/%.c=$(OBJDIR)/%.d)
+DEPFILES := $(DEPFILES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.dpp)
+
+$(OUTPUT) : $(OBJECTS)
+	$(LINKER) $(LDFLAGS) $^ -o $@
+	$(SIZE) --format=SysV $@
+
+$(OBJDIR)/%.o : $(SRCDIR)/%.c
+	$(CC) $(CFLAGS) $(TARGET) $< -o $@
+
+$(OBJDIR)/%.o : $(SRCDIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(TARGET) $< -o $@
+
+$(OBJDIR)/%.d : $(SRCDIR)/%.c
+	$(CC) -MM $<  > $@.$($$$$)
+	sed -e 's|^[A-Za-z0-9]*.o|$(OBJDIR)/& $@|' < $@.$($$$$) > $@
+	-rm $@.$($$$$)
+
+$(OBJDIR)/%.dpp : $(SRCDIR)/%.cpp
+	$(CXX) -MM $<  > $@.$($$$$)
+	sed -e 's|^[A-Za-z0-9]*.o|$(OBJDIR)/& $@|' < $@.$($$$$) > $@
+	-rm $@.$($$$$)
+
+debug : $(OUTPUT)
+	$(GDB) -ex "target remote localhost:3333" \
+	-ex "mon reset halt" $(OUTPUT)
+
+.PHONY : clean project dump
+clean :
+	-rm ./obj/* $(OUTPUT)
+
+project :
+	-mkdir $(SRCDIR) $(HEADERDIR) $(OBJDIR) $(BUILDDIR)
+	-sed -e "s|Application|$$(basename $$PWD)|" <Makefile >Makefile_temp
+	-mv Makefile_temp Makefile
+
+dump :
+	$(OBJDUMP) -s $(OUTPUT) > $(BUILDDIR)/memdump
+	$(OBJDUMP) -d $(OUTPUT) > $(BUILDDIR)/dis
+	pr -mt --page-width=140 $(BUILDDIR)/memdump $(BUILDDIR)/dis | \
+	less
+
+include $(DEPFILES)
